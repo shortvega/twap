@@ -209,18 +209,18 @@
             </div>
             <div class="input-group">
                 <label>Start Time (UTC)</label>
-                <input type="datetime-local" id="startTime">
+                <input type="text" id="startTime" placeholder="2025-01-30 12:00:00">
             </div>
             <div class="input-group">
                 <label>End Time (UTC)</label>
-                <input type="datetime-local" id="endTime">
+                <input type="text" id="endTime" placeholder="2025-01-30 18:00:00">
             </div>
             <div class="input-group">
                 <label>Time Interval</label>
                 <select id="interval">
-                    <option value="1m">1 Minute</option>
+                    <option value="1m" selected>1 Minute</option>
                     <option value="5m">5 Minutes</option>
-                    <option value="15m" selected>15 Minutes</option>
+                    <option value="15m">15 Minutes</option>
                     <option value="1h">1 Hour</option>
                     <option value="4h">4 Hours</option>
                     <option value="1d">1 Day</option>
@@ -256,6 +256,8 @@
                         <div class="summary-label">End Price</div>
                         <div class="summary-value price" id="endPrice">-</div>
                     </div>
+                </div>
+                <div class="summary-grid" style="margin-top: 16px;">
                     <div class="summary-item">
                         <div class="summary-label">High</div>
                         <div class="summary-value positive" id="highPrice">-</div>
@@ -301,17 +303,27 @@
             const now = new Date();
             const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
             
-            document.getElementById('endTime').value = formatDateTimeLocal(now);
-            document.getElementById('startTime').value = formatDateTimeLocal(yesterday);
+            document.getElementById('endTime').value = formatDateTimeWithSeconds(now);
+            document.getElementById('startTime').value = formatDateTimeWithSeconds(yesterday);
         }
         
-        function formatDateTimeLocal(date) {
+        function formatDateTimeWithSeconds(date) {
             const year = date.getUTCFullYear();
             const month = String(date.getUTCMonth() + 1).padStart(2, '0');
             const day = String(date.getUTCDate()).padStart(2, '0');
             const hours = String(date.getUTCHours()).padStart(2, '0');
             const minutes = String(date.getUTCMinutes()).padStart(2, '0');
-            return `${year}-${month}-${day}T${hours}:${minutes}`;
+            const seconds = String(date.getUTCSeconds()).padStart(2, '0');
+            return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+        }
+        
+        function parseDateTimeWithSeconds(str) {
+            // Parse "YYYY-MM-DD HH:MM:SS" as UTC
+            const cleaned = str.trim().replace('T', ' ');
+            const [datePart, timePart] = cleaned.split(' ');
+            const [year, month, day] = datePart.split('-').map(Number);
+            const [hours, minutes, seconds] = (timePart || '00:00:00').split(':').map(Number);
+            return Date.UTC(year, month - 1, day, hours || 0, minutes || 0, seconds || 0);
         }
         
         function formatUTCTime(timestamp) {
@@ -319,13 +331,23 @@
             return date.toISOString().replace('T', ' ').substring(0, 19);
         }
         
-        function formatNumber(num, decimals = 2) {
+        function addCommas(num) {
+            return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+        }
+        
+        function formatPrice(num, precision) {
+            const parts = num.toFixed(precision).split('.');
+            parts[0] = addCommas(parts[0]);
+            return parts.join('.');
+        }
+        
+        function formatVolume(num, decimals = 2) {
             if (num >= 1000000) {
-                return (num / 1000000).toFixed(2) + 'M';
+                return addCommas((num / 1000000).toFixed(decimals)) + 'M';
             } else if (num >= 1000) {
-                return (num / 1000).toFixed(2) + 'K';
+                return addCommas((num / 1000).toFixed(decimals)) + 'K';
             }
-            return num.toFixed(decimals);
+            return addCommas(num.toFixed(decimals));
         }
         
         function getPrecision(price) {
@@ -370,8 +392,8 @@
             }
             
             // Parse as UTC
-            const startTime = new Date(startTimeStr + 'Z').getTime();
-            const endTime = new Date(endTimeStr + 'Z').getTime();
+            const startTime = parseDateTimeWithSeconds(startTimeStr);
+            const endTime = parseDateTimeWithSeconds(endTimeStr);
             
             if (startTime >= endTime) {
                 showError('Start time must be before end time');
@@ -446,14 +468,14 @@
                 
                 // Update summary
                 document.getElementById('summary').classList.add('visible');
-                document.getElementById('twapValue').textContent = twap.toFixed(precision);
-                document.getElementById('vwapValue').textContent = vwap.toFixed(precision);
-                document.getElementById('startPrice').textContent = startPrice.toFixed(precision);
-                document.getElementById('endPrice').textContent = endPrice.toFixed(precision);
-                document.getElementById('highPrice').textContent = high.toFixed(precision);
-                document.getElementById('lowPrice').textContent = low.toFixed(precision);
-                document.getElementById('totalVolume').textContent = formatNumber(totalVolume);
-                document.getElementById('candleCount').textContent = candles.length;
+                document.getElementById('twapValue').textContent = formatPrice(twap, precision);
+                document.getElementById('vwapValue').textContent = formatPrice(vwap, precision);
+                document.getElementById('startPrice').textContent = formatPrice(startPrice, precision);
+                document.getElementById('endPrice').textContent = formatPrice(endPrice, precision);
+                document.getElementById('highPrice').textContent = formatPrice(high, precision);
+                document.getElementById('lowPrice').textContent = formatPrice(low, precision);
+                document.getElementById('totalVolume').textContent = formatVolume(totalVolume);
+                document.getElementById('candleCount').textContent = addCommas(candles.length);
                 
                 // Build table with cumulative TWAP
                 const tableBody = document.getElementById('tableBody');
@@ -467,12 +489,12 @@
                     const row = document.createElement('tr');
                     row.innerHTML = `
                         <td>${formatUTCTime(candle.openTime)}</td>
-                        <td>${candle.open.toFixed(precision)}</td>
-                        <td>${candle.high.toFixed(precision)}</td>
-                        <td>${candle.low.toFixed(precision)}</td>
-                        <td>${candle.close.toFixed(precision)}</td>
-                        <td>${formatNumber(candle.volume)}</td>
-                        <td>${cumulativeTwap.toFixed(precision)}</td>
+                        <td>${formatPrice(candle.open, precision)}</td>
+                        <td>${formatPrice(candle.high, precision)}</td>
+                        <td>${formatPrice(candle.low, precision)}</td>
+                        <td>${formatPrice(candle.close, precision)}</td>
+                        <td>${formatVolume(candle.volume)}</td>
+                        <td>${formatPrice(cumulativeTwap, precision)}</td>
                     `;
                     tableBody.appendChild(row);
                 });
