@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Binance TWAP Calculator</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0b0e11;
+            color: #eaecef;
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #f0b90b;
+            margin-bottom: 8px;
+            font-size: 24px;
+        }
+        .subtitle {
+            color: #848e9c;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        .input-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+        .input-group {
+            display: flex;
+            flex-direction: column;
+        }
+        label {
+            font-size: 12px;
+            color: #848e9c;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        input, select {
+            background: #1e2329;
+            border: 1px solid #2b3139;
+            border-radius: 4px;
+            padding: 12px;
+            color: #eaecef;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        input:focus, select:focus {
+            border-color: #f0b90b;
+        }
+        input::placeholder {
+            color: #5e6673;
+        }
+        button {
+            background: #f0b90b;
+            color: #0b0e11;
+            border: none;
+            border-radius: 4px;
+            padding: 14px 28px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        button:hover {
+            background: #d9a60b;
+        }
+        button:disabled {
+            background: #5e6673;
+            cursor: not-allowed;
+        }
+        .results {
+            margin-top: 30px;
+        }
+        .summary {
+            background: #1e2329;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            display: none;
+        }
+        .summary.visible {
+            display: block;
+        }
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 20px;
+        }
+        .summary-item {
+            text-align: center;
+        }
+        .summary-label {
+            font-size: 11px;
+            color: #848e9c;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+        .summary-value {
+            font-size: 20px;
+            font-weight: 600;
+            color: #f0b90b;
+        }
+        .summary-value.price {
+            color: #eaecef;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #1e2329;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        th {
+            background: #2b3139;
+            padding: 12px;
+            text-align: left;
+            font-size: 11px;
+            text-transform: uppercase;
+            color: #848e9c;
+            font-weight: 600;
+        }
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #2b3139;
+            font-size: 13px;
+            font-family: 'Monaco', 'Menlo', monospace;
+        }
+        tr:last-child td {
+            border-bottom: none;
+        }
+        tr:hover {
+            background: #2b3139;
+        }
+        .error {
+            background: #ff4d4d20;
+            border: 1px solid #ff4d4d;
+            border-radius: 4px;
+            padding: 12px;
+            color: #ff4d4d;
+            margin-top: 20px;
+            display: none;
+        }
+        .error.visible {
+            display: block;
+        }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #848e9c;
+            display: none;
+        }
+        .loading.visible {
+            display: block;
+        }
+        .spinner {
+            border: 3px solid #2b3139;
+            border-top: 3px solid #f0b90b;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .table-container {
+            max-height: 500px;
+            overflow-y: auto;
+            border-radius: 8px;
+        }
+        .table-container::-webkit-scrollbar {
+            width: 8px;
+        }
+        .table-container::-webkit-scrollbar-track {
+            background: #1e2329;
+        }
+        .table-container::-webkit-scrollbar-thumb {
+            background: #2b3139;
+            border-radius: 4px;
+        }
+        .positive { color: #0ecb81; }
+        .negative { color: #f6465d; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Binance TWAP Calculator</h1>
+        <p class="subtitle">Calculate time-weighted average prices from Binance spot market data</p>
+        
+        <div class="input-grid">
+            <div class="input-group">
+                <label>Token Pair</label>
+                <input type="text" id="token" placeholder="BTCUSDT" value="BTCUSDT">
+            </div>
+            <div class="input-group">
+                <label>Start Time (UTC)</label>
+                <input type="datetime-local" id="startTime">
+            </div>
+            <div class="input-group">
+                <label>End Time (UTC)</label>
+                <input type="datetime-local" id="endTime">
+            </div>
+            <div class="input-group">
+                <label>Time Interval</label>
+                <select id="interval">
+                    <option value="1m">1 Minute</option>
+                    <option value="5m">5 Minutes</option>
+                    <option value="15m" selected>15 Minutes</option>
+                    <option value="1h">1 Hour</option>
+                    <option value="4h">4 Hours</option>
+                    <option value="1d">1 Day</option>
+                </select>
+            </div>
+        </div>
+        
+        <button id="fetchBtn" onclick="fetchTWAP()">Calculate TWAP</button>
+        
+        <div class="error" id="error"></div>
+        
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            Fetching data from Binance...
+        </div>
+        
+        <div class="results">
+            <div class="summary" id="summary">
+                <div class="summary-grid">
+                    <div class="summary-item">
+                        <div class="summary-label">TWAP</div>
+                        <div class="summary-value" id="twapValue">-</div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="summary-label">VWAP</div>
+                        <div class="summary-value" id="vwapValue">-</div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="summary-label">Start Price</div>
+                        <div class="summary-value price" id="startPrice">-</div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="summary-label">End Price</div>
+                        <div class="summary-value price" id="endPrice">-</div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="summary-label">High</div>
+                        <div class="summary-value positive" id="highPrice">-</div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="summary-label">Low</div>
+                        <div class="summary-value negative" id="lowPrice">-</div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="summary-label">Total Volume</div>
+                        <div class="summary-value price" id="totalVolume">-</div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="summary-label">Candles</div>
+                        <div class="summary-value price" id="candleCount">-</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="table-container">
+                <table id="dataTable" style="display: none;">
+                    <thead>
+                        <tr>
+                            <th>Time (UTC)</th>
+                            <th>Open</th>
+                            <th>High</th>
+                            <th>Low</th>
+                            <th>Close</th>
+                            <th>Volume</th>
+                            <th>TWAP (Cumulative)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Set default times (last 24 hours)
+        function setDefaultTimes() {
+            const now = new Date();
+            const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+            
+            document.getElementById('endTime').value = formatDateTimeLocal(now);
+            document.getElementById('startTime').value = formatDateTimeLocal(yesterday);
+        }
+        
+        function formatDateTimeLocal(date) {
+            const year = date.getUTCFullYear();
+            const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+            const day = String(date.getUTCDate()).padStart(2, '0');
+            const hours = String(date.getUTCHours()).padStart(2, '0');
+            const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+            return `${year}-${month}-${day}T${hours}:${minutes}`;
+        }
+        
+        function formatUTCTime(timestamp) {
+            const date = new Date(timestamp);
+            return date.toISOString().replace('T', ' ').substring(0, 19);
+        }
+        
+        function formatNumber(num, decimals = 2) {
+            if (num >= 1000000) {
+                return (num / 1000000).toFixed(2) + 'M';
+            } else if (num >= 1000) {
+                return (num / 1000).toFixed(2) + 'K';
+            }
+            return num.toFixed(decimals);
+        }
+        
+        function getPrecision(price) {
+            if (price >= 10000) return 2;
+            if (price >= 100) return 3;
+            if (price >= 1) return 4;
+            if (price >= 0.01) return 6;
+            return 8;
+        }
+        
+        function showError(message) {
+            const errorEl = document.getElementById('error');
+            errorEl.textContent = message;
+            errorEl.classList.add('visible');
+        }
+        
+        function hideError() {
+            document.getElementById('error').classList.remove('visible');
+        }
+        
+        function setLoading(loading) {
+            document.getElementById('loading').classList.toggle('visible', loading);
+            document.getElementById('fetchBtn').disabled = loading;
+        }
+        
+        async function fetchTWAP() {
+            hideError();
+            
+            const token = document.getElementById('token').value.toUpperCase().trim();
+            const startTimeStr = document.getElementById('startTime').value;
+            const endTimeStr = document.getElementById('endTime').value;
+            const interval = document.getElementById('interval').value;
+            
+            if (!token) {
+                showError('Please enter a token pair');
+                return;
+            }
+            
+            if (!startTimeStr || !endTimeStr) {
+                showError('Please select start and end times');
+                return;
+            }
+            
+            // Parse as UTC
+            const startTime = new Date(startTimeStr + 'Z').getTime();
+            const endTime = new Date(endTimeStr + 'Z').getTime();
+            
+            if (startTime >= endTime) {
+                showError('Start time must be before end time');
+                return;
+            }
+            
+            setLoading(true);
+            
+            try {
+                // Fetch all candles (may need multiple requests for large ranges)
+                let allCandles = [];
+                let currentStart = startTime;
+                const limit = 1000;
+                
+                while (currentStart < endTime) {
+                    const url = `https://api.binance.com/api/v3/klines?symbol=${token}&interval=${interval}&startTime=${currentStart}&endTime=${endTime}&limit=${limit}`;
+                    
+                    const response = await fetch(url);
+                    
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.msg || 'Failed to fetch data');
+                    }
+                    
+                    const data = await response.json();
+                    
+                    if (data.length === 0) break;
+                    
+                    allCandles = allCandles.concat(data);
+                    
+                    // Move start time to after the last candle
+                    const lastCandleCloseTime = data[data.length - 1][6];
+                    currentStart = lastCandleCloseTime + 1;
+                    
+                    // If we got less than limit, we're done
+                    if (data.length < limit) break;
+                }
+                
+                if (allCandles.length === 0) {
+                    throw new Error('No data returned. Check if the token pair exists.');
+                }
+                
+                // Process candles
+                const candles = allCandles.map(c => ({
+                    openTime: c[0],
+                    open: parseFloat(c[1]),
+                    high: parseFloat(c[2]),
+                    low: parseFloat(c[3]),
+                    close: parseFloat(c[4]),
+                    volume: parseFloat(c[5]),
+                    closeTime: c[6],
+                    quoteVolume: parseFloat(c[7]),
+                    trades: c[8]
+                }));
+                
+                // Calculate TWAP (simple average of close prices)
+                const closes = candles.map(c => c.close);
+                const twap = closes.reduce((a, b) => a + b, 0) / closes.length;
+                
+                // Calculate VWAP
+                const totalQuoteVolume = candles.reduce((sum, c) => sum + c.quoteVolume, 0);
+                const totalVolume = candles.reduce((sum, c) => sum + c.volume, 0);
+                const vwap = totalQuoteVolume / totalVolume;
+                
+                // Stats
+                const high = Math.max(...candles.map(c => c.high));
+                const low = Math.min(...candles.map(c => c.low));
+                const startPrice = candles[0].open;
+                const endPrice = candles[candles.length - 1].close;
+                
+                const precision = getPrecision(twap);
+                
+                // Update summary
+                document.getElementById('summary').classList.add('visible');
+                document.getElementById('twapValue').textContent = twap.toFixed(precision);
+                document.getElementById('vwapValue').textContent = vwap.toFixed(precision);
+                document.getElementById('startPrice').textContent = startPrice.toFixed(precision);
+                document.getElementById('endPrice').textContent = endPrice.toFixed(precision);
+                document.getElementById('highPrice').textContent = high.toFixed(precision);
+                document.getElementById('lowPrice').textContent = low.toFixed(precision);
+                document.getElementById('totalVolume').textContent = formatNumber(totalVolume);
+                document.getElementById('candleCount').textContent = candles.length;
+                
+                // Build table with cumulative TWAP
+                const tableBody = document.getElementById('tableBody');
+                tableBody.innerHTML = '';
+                
+                let cumulativeSum = 0;
+                candles.forEach((candle, index) => {
+                    cumulativeSum += candle.close;
+                    const cumulativeTwap = cumulativeSum / (index + 1);
+                    
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${formatUTCTime(candle.openTime)}</td>
+                        <td>${candle.open.toFixed(precision)}</td>
+                        <td>${candle.high.toFixed(precision)}</td>
+                        <td>${candle.low.toFixed(precision)}</td>
+                        <td>${candle.close.toFixed(precision)}</td>
+                        <td>${formatNumber(candle.volume)}</td>
+                        <td>${cumulativeTwap.toFixed(precision)}</td>
+                    `;
+                    tableBody.appendChild(row);
+                });
+                
+                document.getElementById('dataTable').style.display = 'table';
+                
+            } catch (error) {
+                showError(error.message);
+                document.getElementById('summary').classList.remove('visible');
+                document.getElementById('dataTable').style.display = 'none';
+            } finally {
+                setLoading(false);
+            }
+        }
+        
+        // Initialize
+        setDefaultTimes();
+    </script>
+</body>
+</html>
